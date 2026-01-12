@@ -1,0 +1,616 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Putting Score</title>
+<style>
+  :root{
+    --bg:#0b0f12;
+    --panel:#0f1619;
+    --muted:#9aa6ad;
+    --accent:#2dd4bf;
+    --danger:#ff6b6b;
+    --win:#1f8a58;
+    --card:#0c1316;
+    --glass: rgba(255,255,255,0.03);
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; font-family:Inter,system-ui,Segoe UI,Roboto,Arial;
+    background:linear-gradient(180deg,var(--bg), #071013);
+    color:#e7eef0; padding:18px; min-height:100vh;
+  }
+  header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+  h1{margin:0;font-size:20px;color:var(--accent)}
+  p.lead{margin:0;color:var(--muted);font-size:13px}
+  .controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .btn{background:var(--glass);border:1px solid rgba(255,255,255,0.04);color:var(--accent);padding:8px 12px;border-radius:8px;cursor:pointer;font-weight:600}
+  .btn.positive{background:linear-gradient(90deg,#0b5e4b,#073b2f);color:#dff6ea;border:none}
+  .btn.ghost{background:transparent;border:1px solid rgba(255,255,255,0.04);color:var(--muted)}
+  .btn.red{background:linear-gradient(90deg,#5a1b1b,#7b1e1e);color:#ffdfe0}
+  .input, select{background:transparent;border:1px solid rgba(255,255,255,0.06);color:inherit;padding:8px 10px;border-radius:8px;font-size:13px}
+  main{display:flex;gap:16px;align-items:flex-start;width:100%;margin-top:14px}
+  .sidebar{width:320px;max-width:calc(100% - 420px);background:linear-gradient(180deg,var(--panel), #071013);border-radius:12px;padding:12px;box-shadow:0 6px 24px rgba(0,0,0,0.6);height:calc(100vh - 120px);overflow:auto}
+  .section{margin-bottom:14px}
+  label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px}
+  .players-list{display:flex;flex-direction:column;gap:8px}
+  .player-row{display:flex;gap:8px;align-items:center}
+  .player-row input{flex:1;background:transparent;border:1px solid rgba(255,255,255,0.04);color:inherit;padding:8px;border-radius:8px}
+  .player-controls{display:flex;gap:6px;align-items:center}
+  .player-toggle{background:transparent;border:1px solid rgba(255,255,255,0.06);padding:6px;border-radius:6px;color:var(--muted);cursor:pointer}
+  .player-toggle.off{opacity:0.45;text-decoration:line-through;color:#777}
+  .table-wrap{flex:1;min-width:300px;background:linear-gradient(180deg, rgba(255,255,255,0.02), transparent);border-radius:12px;padding:10px;height:calc(100vh - 120px);overflow:auto}
+  table{border-collapse:collapse;width:100%;min-width:720px;color:inherit}
+  thead th{position:sticky;top:0;background:linear-gradient(180deg, rgba(10,14,16,0.95), rgba(10,14,16,0.7));text-align:center;font-weight:700;padding:10px 8px;border-bottom:1px solid rgba(255,255,255,0.04);font-size:13px}
+  tbody td{padding:8px 6px;text-align:center;border-bottom:1px dashed rgba(255,255,255,0.02);font-size:13px}
+  .round-col{width:56px}
+  .result-cell{display:flex;flex-direction:column;gap:6px;align-items:center}
+  .action-btns{display:flex;gap:6px}
+  .action-btns button{padding:6px 8px;border-radius:6px;border:none;font-weight:700;cursor:pointer}
+  .miss{background:#ff7b7b;color:#000}
+  .circle{background:#ffd966;color:#000}
+  .hole{background:#8bffcf;color:#000}
+  .delta{font-size:12px;margin-top:4px}
+  .score-positive{color:var(--win)}
+  .score-negative{color:var(--danger)}
+  .notes{font-size:12px;color:var(--muted)}
+  .card{background:linear-gradient(180deg, rgba(255,255,255,0.02), transparent);padding:10px;border-radius:8px;min-width:140px}
+  .player-name{font-weight:700}
+  .player-total{font-size:18px;margin-top:6px}
+  .small-muted{font-size:12px;color:var(--muted)}
+  .controls-right{display:flex;gap:8px}
+  @media (max-width:1000px){main{flex-direction:column}.sidebar{width:100%;height:auto}.table-wrap{height:auto}table{min-width:720px}}
+
+  input, select, textarea {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
+}
+
+.sidebar {
+  -webkit-overflow-scrolling: touch; /* smooth scroll & touch-friendly */
+}
+
+button, .player-row {
+  touch-action: manipulation; /* biar Safari paham klik/tap */
+}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Putting Score</h1>
+    <p class="lead">Hole = 2×lawan · Lingkaran = 1×lawan · Miss = 0 · Real-time · Autosave</p>
+  </div>
+  <div class="controls controls-right">
+    <button id="undoBtn" class="btn ghost">↶ Undo</button>
+    <button id="exportBtn" class="btn ghost">Export CSV</button>
+    <button id="resetBtn" class="btn red">Reset</button>
+    <button id="addPlayerBtn" class="btn">+ Player</button>
+    <button id="addRoundBtn" class="btn positive">+ Round</button>
+  </div>
+</header>
+
+<main>
+  <aside class="sidebar">
+    <div class="section">
+      <label>Players (edit name inline)</label>
+      <div class="players-list" id="playersList"></div>
+      <div class="small-muted" style="margin-top:8px">
+        - Toggle <strong>ON/OFF</strong> untuk aktif/istirahat (OFF tidak ikut ronde baru).<br>
+        - Menambahkan pemain tidak mengubah skor ronde sebelumnya.
+      </div>
+    </div>
+
+    <div class="section">
+      <label>Leaderboard</label>
+      <div id="leaderboard" class="totals"></div>
+    </div>
+
+    <div class="section">
+      <label>Notes</label>
+      <div class="small-muted">
+        - Klik salah satu tombol hasil pada tiap cell (❌/⚪/✅).<br>
+        - Jika lebih dari satu pemain punya hasil tertinggi → <em>Draw</em> (no score change).<br>
+        - Undo akan membatalkan langkah terakhir (setiap klik hasil, tambah ronde, tambah player, toggle, delete).
+      </div>
+    </div>
+  </aside>
+
+  <section class="table-wrap">
+    <div style="overflow:auto">
+      <table id="scoreTable" role="table" aria-label="Putting score table">
+        <thead id="tableHead"></thead>
+        <tbody id="tableBody"></tbody>
+        <tfoot id="tableFoot"></tfoot>
+      </table>
+    </div>
+  </section>
+</main>
+
+<footer style="margin-top:10px;color:var(--muted);font-size:13px">File: putting-score.html · Responsive · Dark mode · Autosave (local)</footer>
+
+<script>
+/* Putting Score final
+   - Real-time
+   - Undo / Reset
+   - Add Player / Add Round
+   - Player ON/OFF toggles
+   - Negative scores for losers; totals visible
+   - Autosave to localStorage
+*/
+
+const STORAGE_KEY = 'putting_score_state_v2';
+let historyStack = [];
+
+// default state
+let state = {
+  players: [ {name:'Player 1', active:true}, {name:'Player 2', active:true}, {name:'Player 3', active:true} ],
+  rounds: [] // each: { results: [val|undefined,...], notes: '', deltas: [num,...] }
+};
+
+// DOM refs
+const playersListEl = document.getElementById('playersList');
+const addPlayerBtn = document.getElementById('addPlayerBtn');
+const addRoundBtn = document.getElementById('addRoundBtn');
+const exportBtn = document.getElementById('exportBtn');
+const resetBtn = document.getElementById('resetBtn');
+const undoBtn = document.getElementById('undoBtn');
+
+const tableHead = document.getElementById('tableHead');
+const tableBody = document.getElementById('tableBody');
+const tableFoot = document.getElementById('tableFoot');
+const leaderboardEl = document.getElementById('leaderboard');
+
+// load/save
+function saveState(){
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e){ console.warn('save fail', e); }
+}
+function loadState(){
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(raw){
+      const parsed = JSON.parse(raw);
+      if(parsed.players && Array.isArray(parsed.players) && Array.isArray(parsed.rounds)){
+        state = parsed;
+        normalizeState();
+        return;
+      }
+    }
+  } catch(e){ /* ignore */ }
+  // default
+  state = {
+    players: [ {name:'Player 1', active:true}, {name:'Player 2', active:true}, {name:'Player 3', active:true} ],
+    rounds: []
+  };
+}
+
+function pushHistory(){
+  try {
+    const snap = JSON.parse(JSON.stringify(state));
+    historyStack.push(snap);
+    if(historyStack.length > 200) historyStack.shift();
+    updateUndoBtn();
+  } catch(e){}
+}
+function undo(){
+  if(historyStack.length === 0) return;
+  state = historyStack.pop();
+  normalizeState();
+  renderAll();
+  saveState();
+  updateUndoBtn();
+}
+function updateUndoBtn(){
+  undoBtn.disabled = historyStack.length === 0;
+}
+
+// normalization: ensure each round.results length matches players length
+function normalizeState(){
+  state.rounds.forEach(r => {
+    if(!Array.isArray(r.results)) r.results = [];
+    while(r.results.length < state.players.length) r.results.push(undefined);
+    while(r.results.length > state.players.length) r.results.pop();
+  });
+}
+
+// UI rendering
+function renderPlayersUI(){
+  playersListEl.innerHTML = '';
+  state.players.forEach((p, idx) => {
+    const row = document.createElement('div'); row.className='player-row';
+    const input = document.createElement('input'); input.value = p.name;
+    input.addEventListener('input', (e) => {
+      pushHistory();
+      state.players[idx].name = e.target.value || `P${idx+1}`;
+      renderTableHead();
+      renderLeaderboard();
+      saveState();
+    });
+    row.appendChild(input);
+
+    const controls = document.createElement('div'); controls.className='player-controls';
+    const toggle = document.createElement('button'); toggle.className='player-toggle'; toggle.textContent = p.active ? 'ON' : 'OFF';
+    if(!p.active) toggle.classList.add('off');
+    toggle.addEventListener('click', ()=>{
+      pushHistory();
+      state.players[idx].active = !state.players[idx].active;
+      toggle.textContent = state.players[idx].active ? 'ON' : 'OFF';
+      toggle.classList.toggle('off', !state.players[idx].active);
+      renderTableHead();
+      // when toggling OFF/ON we do NOT retroactively change rounds; only affects future rounds
+      saveState();
+    });
+    controls.appendChild(toggle);
+
+    const removeBtn = document.createElement('button'); removeBtn.className='player-toggle'; removeBtn.textContent='Remove';
+    removeBtn.addEventListener('click', ()=>{
+      if(!confirm(`Remove player "${state.players[idx].name}"? This will remove their column (history kept as removed).`)) return;
+      pushHistory();
+      // remove player's per-round results
+      state.rounds.forEach(r => { if(Array.isArray(r.results)) r.results.splice(idx,1); if(Array.isArray(r.deltas)) r.deltas.splice(idx,1); });
+      state.players.splice(idx,1);
+      renderPlayersUI();
+      renderAll();
+      saveState();
+    });
+    controls.appendChild(removeBtn);
+
+    row.appendChild(controls);
+    playersListEl.appendChild(row);
+  });
+} 
+
+function renderTableHead(){
+  tableHead.innerHTML = '';
+
+  const trNames = document.createElement('tr');
+  const thRound = document.createElement('th');
+  thRound.className='round-col';
+  thRound.textContent = 'Round';
+  trNames.appendChild(thRound);
+
+  state.players.forEach((p, idx) => {
+    const th = document.createElement('th');
+
+    // --- Ganti contentEditable jadi input ---
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = p.name;
+    input.style.width = '100%';
+    input.style.background = 'transparent';
+    input.style.border = 'none';
+    input.style.color = 'inherit';
+    input.style.textAlign = 'center';
+    input.style.fontSize = '13px';
+    input.addEventListener('input', () => {
+      state.players[idx].name = input.value || `P${idx+1}`;
+      renderPlayersUI();
+      renderLeaderboard();
+      saveState();
+    });
+    th.appendChild(input);
+
+    // small on/off indicator
+    const sub = document.createElement('div');
+    sub.style.fontSize='11px';
+    sub.style.color='var(--muted)';
+    sub.textContent = p.active ? 'ON' : 'OFF';
+    th.appendChild(sub);
+
+    trNames.appendChild(th);
+  });
+
+  const thNotes = document.createElement('th');
+  thNotes.textContent = 'Notes';
+  trNames.appendChild(thNotes);
+  tableHead.appendChild(trNames);
+
+  // second header row: totals snapshot
+  const trTotals = document.createElement('tr');
+  const thTotalLabel = document.createElement('th');
+  thTotalLabel.textContent='Total';
+  trTotals.appendChild(thTotalLabel);
+
+  const totals = computeTotals();
+  state.players.forEach((p, idx) => {
+    const th = document.createElement('th');
+    const v = totals[idx] || 0;
+    th.textContent = (v>0? `+${v}` : `${v}`);
+    th.style.color = v>0? 'var(--win)' : v<0? 'var(--danger)' : 'var(--muted)';
+    trTotals.appendChild(th);
+  });
+
+  const thEmpty = document.createElement('th'); 
+  thEmpty.textContent=''; 
+  trTotals.appendChild(thEmpty);
+  tableHead.appendChild(trTotals);
+}
+
+function renderTableBody(){
+  tableBody.innerHTML = '';
+  state.rounds.forEach((round, rIdx) => {
+    const tr = document.createElement('tr');
+    const tdRound = document.createElement('td'); tdRound.textContent = rIdx+1; tr.appendChild(tdRound);
+
+    state.players.forEach((p, pIdx) => {
+      const td = document.createElement('td');
+      if(round.results && round.results[pIdx] !== undefined){
+        const cellWrap = document.createElement('div'); cellWrap.className='result-cell';
+        const btnRow = document.createElement('div'); btnRow.className='action-btns';
+        const btnMiss = document.createElement('button'); btnMiss.className='miss'; btnMiss.textContent='❌';
+        const btnCircle = document.createElement('button'); btnCircle.className='circle'; btnCircle.textContent='⚪';
+        const btnHole = document.createElement('button'); btnHole.className='hole'; btnHole.textContent='✅';
+        // active state styling
+        const cur = round.results[pIdx];
+        if(cur === 'Miss') btnMiss.style.boxShadow='0 0 0 2px rgba(255,123,123,0.18)';
+        if(cur === 'Lingkaran') btnCircle.style.boxShadow='0 0 0 2px rgba(255,217,102,0.18)';
+        if(cur === 'Hole') btnHole.style.boxShadow='0 0 0 2px rgba(139,255,207,0.18)';
+        btnMiss.addEventListener('click', ()=> setResult(pIdx, rIdx, 'Miss'));
+        btnCircle.addEventListener('click', ()=> setResult(pIdx, rIdx, 'Lingkaran'));
+        btnHole.addEventListener('click', ()=> setResult(pIdx, rIdx, 'Hole'));
+        btnRow.appendChild(btnMiss); btnRow.appendChild(btnCircle); btnRow.appendChild(btnHole);
+        cellWrap.appendChild(btnRow);
+
+        // delta display (if exists)
+        const deltaVal = round.deltas && typeof round.deltas[pIdx] === 'number' ? round.deltas[pIdx] : null;
+        const deltaSpan = document.createElement('div'); deltaSpan.className='delta';
+        if(deltaVal === null || deltaVal === undefined) deltaSpan.textContent = '';
+        else {
+          deltaSpan.textContent = deltaVal>0? `+${deltaVal}` : `${deltaVal}`;
+          deltaSpan.style.color = deltaVal>0? 'var(--win)' : deltaVal<0? 'var(--danger)' : 'var(--muted)';
+        }
+        cellWrap.appendChild(deltaSpan);
+        td.appendChild(cellWrap);
+      } else {
+        td.textContent = ''; td.style.opacity = 0.45;
+      }
+      tr.appendChild(td);
+    });
+
+    // notes cell
+    const tdNotes = document.createElement('td'); tdNotes.className='notes';
+    tdNotes.textContent = round.notes || '';
+    tr.appendChild(tdNotes);
+
+    tableBody.appendChild(tr);
+  });
+}
+
+function renderTableFoot(){
+  tableFoot.innerHTML = '';
+  const tr = document.createElement('tr');
+  const th = document.createElement('th'); th.textContent = 'Total'; tr.appendChild(th);
+  const totals = computeTotals();
+  state.players.forEach((p, idx) => {
+    const td = document.createElement('td');
+    const v = totals[idx] || 0;
+    td.textContent = v>0? `+${v}` : `${v}`;
+    td.style.color = v>0? 'var(--win)' : v<0? 'var(--danger)' : 'var(--muted)';
+    tr.appendChild(td);
+  });
+  const tdEmpty = document.createElement('td'); tdEmpty.textContent=''; tr.appendChild(tdEmpty);
+  tableFoot.appendChild(tr);
+}
+
+function renderLeaderboard(){
+  leaderboardEl.innerHTML = '';
+  const totals = computeTotals();
+  const arr = state.players.map((p,i)=>({name:p.name, total:totals[i]||0}));
+  arr.sort((a,b)=>b.total - a.total);
+  arr.forEach(it => {
+    const card = document.createElement('div'); card.className='card';
+    card.innerHTML = `<div class="player-name">${it.name}</div><div class="player-total" style="color:${it.total>0? 'var(--win)': it.total<0? 'var(--danger)': 'var(--muted)'}">${it.total>0? '+'+it.total: it.total}</div>`;
+    leaderboardEl.appendChild(card);
+  });
+}
+
+function renderPlayersList(){
+  // build sidebar controls (inputs + toggles)
+  renderPlayersUI();
+}
+
+// full render
+function renderAll(){
+  normalizeState();
+  renderTableHead();
+  renderTableBody();
+  renderTableFoot();
+  renderLeaderboard();
+  renderPlayersUI();
+  updateUndoBtn();
+}
+
+// ---------- actions ----------
+addPlayerBtn.addEventListener('click', ()=>{
+  pushHistory();
+  const idx = state.players.length;
+  state.players.push({name:`Player ${idx+1}`, active:true});
+  // push undefined into previous rounds
+  state.rounds.forEach(r => { if(!Array.isArray(r.results)) r.results=[]; r.results.push(undefined); if(Array.isArray(r.deltas)) r.deltas.push(null); });
+  saveState();
+  renderAll();
+});
+
+addRoundBtn.addEventListener('click', ()=>{
+  pushHistory();
+  // create new round: participants = players.filter(active) will get default 'Miss', others undefined
+  const r = { results: [], notes:'', deltas: [] };
+  state.players.forEach(p => {
+    if(p.active) r.results.push('Miss'); else r.results.push(undefined);
+    r.deltas.push(null);
+  });
+  state.rounds.push(r);
+  recalcAll(); // will compute notes/deltas and totals
+  saveState();
+  renderAll();
+});
+
+resetBtn.addEventListener('click', ()=>{
+  if(!confirm('Reset semua data dan hapus penyimpanan lokal?')) return;
+  pushHistory();
+  localStorage.removeItem(STORAGE_KEY);
+  loadState();
+  historyStack = [];
+  saveState();
+  renderAll();
+});
+
+undoBtn.addEventListener('click', ()=>{
+  undo();
+});
+
+exportBtn.addEventListener('click', ()=>{
+  exportCSV();
+});
+
+// set result for a player in a round
+function setResult(playerIdx, roundIdx, result){
+  pushHistory();
+  const rnd = state.rounds[roundIdx];
+  if(!rnd) return;
+  rnd.results[playerIdx] = result;
+  recalcRound(roundIdx);
+  saveState();
+  renderAll();
+}
+
+// recalc a single round's notes & deltas
+function recalcRound(rIdx){
+  const rnd = state.rounds[rIdx];
+  if(!rnd || !Array.isArray(rnd.results)) return;
+  // participants indexes
+  const participants = [];
+  rnd.results.forEach((res, idx) => { if(res !== undefined) participants.push({idx, res}); });
+  const N = participants.length;
+  rnd.deltas = Array(state.players.length).fill(null);
+  if(N <= 1){
+    rnd.notes = 'Not enough players';
+    // deltas remain null
+    return;
+  }
+  // compute m values
+  const mvals = participants.map(p => p.res === 'Hole' ? 2 : p.res === 'Lingkaran' ? 1 : 0);
+  const m_max = Math.max(...mvals);
+  // find winners (only count if m_max > 0)
+  const winners = [];
+  mvals.forEach((v,i)=> { if(v === m_max && v > 0) winners.push(participants[i].idx); });
+  if(m_max === 0 || winners.length !== 1){
+    rnd.notes = 'Draw / No changes';
+    return;
+  }
+  const winnerIdx = winners[0];
+  const winVal = m_max * (N - 1);
+  rnd.deltas[winnerIdx] = winVal;
+  participants.forEach(p => {
+    if(p.idx !== winnerIdx) rnd.deltas[p.idx] = -m_max;
+  });
+  rnd.notes = `${state.players[winnerIdx].name} wins +${winVal}`;
+}
+
+// recalc all rounds & totals
+function recalcAll(){
+  state.rounds.forEach((r, idx) => recalcRound(idx));
+  // totals computed on demand in computeTotals()
+}
+
+// compute totals array
+function computeTotals(){
+  const totals = new Array(state.players.length).fill(0);
+  state.rounds.forEach(r => {
+    if(!r || !Array.isArray(r.deltas)) return;
+    r.deltas.forEach((d, i) => { if(typeof d === 'number') totals[i] += d; });
+  });
+  return totals;
+}
+
+// export CSV
+function exportCSV(){
+  const rows = [];
+  const header = ['Round', ...state.players.map(p => p.name), 'Notes'];
+  rows.push(header);
+  state.rounds.forEach((r, ridx) => {
+    const row = [ridx+1];
+    state.players.forEach((p, pidx) => {
+      const val = r.results && r.results[pidx] !== undefined ? (r.results[pidx] || '') : '';
+      row.push(val);
+    });
+    row.push(r.notes || '');
+    rows.push(row);
+  });
+  const totals = computeTotals();
+  const totalRow = ['Total', ...totals.map(t => (t>0? `+${t}` : `${t}`)), ''];
+  rows.push(totalRow);
+  const csv = rows.map(r => r.map(cell => `"${String(cell).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = 'putting_scores.csv'; a.click(); URL.revokeObjectURL(url);
+}
+
+// initial load & render
+function renderPlayersUI(){
+  // reuse UI builder code earlier: re-render players list
+  playersListEl.innerHTML = '';
+  state.players.forEach((p, idx) => {
+    const row = document.createElement('div'); row.className='player-row';
+    const input = document.createElement('input'); input.value = p.name;
+    input.addEventListener('input', (e) => {
+      // direct name edit in sidebar updates header and leaderboard (no history to avoid noisy pushes)
+      state.players[idx].name = e.target.value || `P${idx+1}`;
+      renderTableHead();
+      renderLeaderboard();
+      saveState();
+    });
+    row.appendChild(input);
+
+    const controls = document.createElement('div'); controls.className='player-controls';
+    const toggle = document.createElement('button'); toggle.className='player-toggle'; toggle.textContent = p.active ? 'ON' : 'OFF';
+    if(!p.active) toggle.classList.add('off');
+    toggle.addEventListener('click', ()=>{
+      pushHistory();
+      state.players[idx].active = !state.players[idx].active;
+      toggle.textContent = state.players[idx].active ? 'ON' : 'OFF';
+      toggle.classList.toggle('off', !state.players[idx].active);
+      saveState();
+      renderTableHead();
+      renderAll();
+    });
+    controls.appendChild(toggle);
+
+    const removeBtn = document.createElement('button'); removeBtn.className='player-toggle'; removeBtn.textContent='Remove';
+    removeBtn.addEventListener('click', ()=>{
+      if(!confirm(`Remove player "${state.players[idx].name}"?`)) return;
+      pushHistory();
+      state.rounds.forEach(r => { if(Array.isArray(r.results)) r.results.splice(idx,1); if(Array.isArray(r.deltas)) r.deltas.splice(idx,1); });
+      state.players.splice(idx,1);
+      saveState();
+      renderAll();
+    });
+    controls.appendChild(removeBtn);
+
+    row.appendChild(controls);
+    playersListEl.appendChild(row);
+  });
+}
+
+// high-level render
+function renderAll(){
+  normalizeState();
+  renderTableHead();
+  renderTableBody();
+  renderTableFoot();
+  renderLeaderboard();
+  renderPlayersUI();
+  updateUndoBtn();
+}
+
+// boot
+loadState();
+recalcAll();
+renderAll();
+updateUndoBtn();
+
+</script>
+</body>
+</html>
