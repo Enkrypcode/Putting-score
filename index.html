@@ -236,12 +236,20 @@ function renderPlayersUI(){
     toggle.addEventListener('click', ()=>{
       pushHistory();
       state.players[idx].active = !state.players[idx].active;
-      toggle.textContent = state.players[idx].active ? 'ON' : 'OFF';
-      toggle.classList.toggle('off', !state.players[idx].active);
-      renderTableHead();
-      // when toggling OFF/ON we do NOT retroactively change rounds; only affects future rounds
+
+      // 🔥 FIX: kalau jadi OFF, hapus dari ronde terakhir yang belum final
+      if(!state.players[idx].active){
+        state.rounds.forEach(r => {
+          if(r.results && r.results[idx] !== undefined){
+            r.results[idx] = undefined;
+            if(r.deltas) r.deltas[idx] = null;
+          }
+        });
+      }
       saveState();
+      renderAll();
     });
+
     controls.appendChild(toggle);
 
     const removeBtn = document.createElement('button'); removeBtn.className='player-toggle'; removeBtn.textContent='Remove';
@@ -330,53 +338,96 @@ function renderTableHead(){
 
 function renderTableBody(){
   tableBody.innerHTML = '';
+
   state.rounds.forEach((round, rIdx) => {
     const tr = document.createElement('tr');
-    const tdRound = document.createElement('td'); tdRound.textContent = rIdx+1; tr.appendChild(tdRound);
+
+    const tdRound = document.createElement('td');
+    tdRound.textContent = rIdx+1;
+    tr.appendChild(tdRound);
 
     state.players.forEach((p, pIdx) => {
       const td = document.createElement('td');
-      if(round.results && round.results[pIdx] !== undefined){
-        const cellWrap = document.createElement('div'); cellWrap.className='result-cell';
-        const btnRow = document.createElement('div'); btnRow.className='action-btns';
-        const btnMiss = document.createElement('button'); btnMiss.className='miss'; btnMiss.textContent='❌';
-        const btnCircle = document.createElement('button'); btnCircle.className='circle'; btnCircle.textContent='⚪';
-        const btnHole = document.createElement('button'); btnHole.className='hole'; btnHole.textContent='✅';
-        // active state styling
+
+      // 🔥 FIX JOIN ROUND (INI YANG PENTING)
+      if (p.joinRound && p.joinRound > rIdx + 1) {
+        td.textContent = '';
+        td.style.opacity = 0.3;
+        tr.appendChild(td);
+        return;
+      }
+
+      if(p.active && round.results && round.results[pIdx] !== undefined){
+
+        const cellWrap = document.createElement('div');
+        cellWrap.className='result-cell';
+
+        const btnRow = document.createElement('div');
+        btnRow.className='action-btns';
+
+        const btnMiss = document.createElement('button');
+        btnMiss.className='miss';
+        btnMiss.textContent='❌';
+
+        const btnCircle = document.createElement('button');
+        btnCircle.className='circle';
+        btnCircle.textContent='⚪';
+
+        const btnHole = document.createElement('button');
+        btnHole.className='hole';
+        btnHole.textContent='✅';
+
         const cur = round.results[pIdx];
         if(cur === 'Miss') btnMiss.style.boxShadow='0 0 0 2px rgba(255,123,123,0.18)';
         if(cur === 'Lingkaran') btnCircle.style.boxShadow='0 0 0 2px rgba(255,217,102,0.18)';
         if(cur === 'Hole') btnHole.style.boxShadow='0 0 0 2px rgba(139,255,207,0.18)';
+
         btnMiss.addEventListener('click', ()=> setResult(pIdx, rIdx, 'Miss'));
         btnCircle.addEventListener('click', ()=> setResult(pIdx, rIdx, 'Lingkaran'));
         btnHole.addEventListener('click', ()=> setResult(pIdx, rIdx, 'Hole'));
-        btnRow.appendChild(btnMiss); btnRow.appendChild(btnCircle); btnRow.appendChild(btnHole);
+
+        btnRow.appendChild(btnMiss);
+        btnRow.appendChild(btnCircle);
+        btnRow.appendChild(btnHole);
+
         cellWrap.appendChild(btnRow);
 
-        // delta display (if exists)
-        const deltaVal = round.deltas && typeof round.deltas[pIdx] === 'number' ? round.deltas[pIdx] : null;
-        const deltaSpan = document.createElement('div'); deltaSpan.className='delta';
-        if(deltaVal === null || deltaVal === undefined) deltaSpan.textContent = '';
-        else {
+        const deltaVal = round.deltas && typeof round.deltas[pIdx] === 'number'
+          ? round.deltas[pIdx]
+          : null;
+
+        const deltaSpan = document.createElement('div');
+        deltaSpan.className='delta';
+
+        if(deltaVal !== null){
           deltaSpan.textContent = deltaVal>0? `+${deltaVal}` : `${deltaVal}`;
-          deltaSpan.style.color = deltaVal>0? 'var(--win)' : deltaVal<0? 'var(--danger)' : 'var(--muted)';
+          deltaSpan.style.color = deltaVal>0
+            ? 'var(--win)'
+            : deltaVal<0
+              ? 'var(--danger)'
+              : 'var(--muted)';
         }
+
         cellWrap.appendChild(deltaSpan);
         td.appendChild(cellWrap);
+
       } else {
-        td.textContent = ''; td.style.opacity = 0.45;
+        td.textContent = '';
+        td.style.opacity = 0.45;
       }
+
       tr.appendChild(td);
     });
 
-    // notes cell
-    const tdNotes = document.createElement('td'); tdNotes.className='notes';
+    const tdNotes = document.createElement('td');
+    tdNotes.className='notes';
     tdNotes.textContent = round.notes || '';
     tr.appendChild(tdNotes);
 
     tableBody.appendChild(tr);
   });
 }
+
 
 function renderTableFoot(){
   tableFoot.innerHTML = '';
@@ -423,15 +474,25 @@ function renderAll(){
 }
 
 // ---------- actions ----------
-addPlayerBtn.addEventListener('click', ()=>{
+addPlayerBtn.addEventListener('click', ()=> {
   pushHistory();
+
   const idx = state.players.length;
-  state.players.push({name:`Player ${idx+1}`, active:true});
-  // push undefined into previous rounds
-  state.rounds.forEach(r => { if(!Array.isArray(r.results)) r.results=[]; r.results.push(undefined); if(Array.isArray(r.deltas)) r.deltas.push(null); });
+
+state.players.push({
+  id: crypto.randomUUID(),
+  name: `Player ${idx+1}`,
+  active: true,
+  joinRound: state.rounds.length + 1
+});
+
+  // ❌ HAPUS bagian push ke ronde lama
+  // JANGAN tambahin ke rounds sebelumnya
+
   saveState();
   renderAll();
 });
+
 
 addRoundBtn.addEventListener('click', ()=>{
   pushHistory();
